@@ -1,5 +1,6 @@
 import requests
 
+from src.aircrafts import Aircraft
 from src.apiadapter import APIAdapter
 
 
@@ -12,6 +13,7 @@ class OpenSkyOpenStreetMap(APIAdapter):
     def __init__(self):
         self.openstreetmap = "https://nominatim.openstreetmap.org/search"
         self.opensky = "https://opensky-network.org/api/states/all"
+        self.coordinates = None
         self.airplanes = None
 
     def get_coordinates(self, country: str) -> dict:
@@ -32,25 +34,48 @@ class OpenSkyOpenStreetMap(APIAdapter):
 
         data = response.json()
         coordinates = data[0].get("boundingbox")
-        self.airplanes = {
+        self.coordinates = {
             "lamin": coordinates[0],
             "lamax": coordinates[1],
             "lomin": coordinates[2],
             "lomax": coordinates[3]
         }
-        return self.airplanes
+        return self.coordinates
 
     def get_airplanes(self):
-        params = self.airplanes
+        params = self.coordinates
         response = requests.get(url=self.opensky, params=params)
 
         if response.status_code != 200:
             raise ApiRequestException(f"Opensky Api ошибка {response.status_code}, {response.reason}")
 
         data = response.json()
-        return data
+        self.airplanes = data.get("states")
+        return self.airplanes
+
+    def get_aircraft(self):
+        states = self.airplanes
+        planes = []
+        for state in states:
+            plane = Aircraft(state)
+            planes.append(plane)
+        return planes
+
+if __name__ == "__main__":
+
+    api = OpenSkyOpenStreetMap()
+
+    # 2. Получаем координаты страны
+    api.get_coordinates("Spain")
+    api.get_airplanes()
+    # 3. Получаем список объектов Aircraft
+    aircraft = api.get_aircraft()
 
 
-api1 = OpenSkyOpenStreetMap()
-api1.get_coordinates("")
-print(api1.get_airplanes())
+    # 4. Берём первый самолёт из списка (если есть)
+    if aircraft:
+        for a in aircraft:
+
+            print(a.param_list)  # ← выводим страну
+    else:
+        print("Самолётов не найдено")
