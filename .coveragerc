@@ -1,0 +1,14 @@
+[run]
+source = src
+omit =
+    src/apiadapter.py
+    src/aircraft_saver_manager.py
+    */test_*.py
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    @abstractmethod
+    def __abstractmethod__
+    raise NotImplementedError

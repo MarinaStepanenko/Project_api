@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional
+
 import requests
 
 from src.aircrafts import Aircraft
@@ -5,77 +7,130 @@ from src.apiadapter import APIAdapter
 
 
 class ApiRequestException(Exception):
+    """Исключение, возникающее при ошибках запросов к внешним API.
+
+    Используется для обработки ошибок HTTP запросов к OpenStreetMap
+    и OpenSky Network API.
+    """
+
     pass
 
 
 class OpenSkyOpenStreetMap(APIAdapter):
+    """Адаптер для работы с API OpenSky Network и OpenStreetMap.
 
-    def __init__(self):
+    Класс позволяет получить координаты страны через Nominatim API,
+    а затем получить список самолётов над указанной территорией
+    через OpenSky Network API.
+
+    Attributes:
+        openstreetmap (str): URL базового эндпоинта Nominatim API
+        opensky (str): URL базового эндпоинта OpenSky Network API
+        coordinates (Optional[Dict[str, str]]): Координаты области поиска
+        airplanes (Optional[List[List[Any]]]): Сырые данные о самолётах от API
+    """
+
+    def __init__(self) -> None:
+        """Инициализирует экземпляр класса с базовыми URL и пустыми данными."""
         self.openstreetmap = "https://nominatim.openstreetmap.org/search"
         self.opensky = "https://opensky-network.org/api/states/all"
-        self.coordinates = None
-        self.airplanes = None
+        self.coordinates: Optional[Dict[str, str]] = None
+        self.airplanes: Optional[List[List[Any]]] = None
 
-    def get_coordinates(self, country: str) -> dict:
+    def get_coordinates(self, country: str) -> Dict[str, str]:
+        """Получает географические координаты страны через Nominatim API.
 
-        headers_nominatim = {
-            "User-Agent":
-                "test - app / 1.0"
-        }
+        Отправляет запрос к OpenStreetMap Nominatim API для получения
+        ограничивающего прямоугольника (bounding box) указанной страны.
 
-        params_nominatim = {
-            "q": country,
-            "format": "json",
-            "limit": 1
-        }
-        response = requests.get(url=self.openstreetmap, headers=headers_nominatim, params=params_nominatim)
+        Args:
+            country: Название страны на английском языке
+
+        Returns:
+            Dict[str, str]: Словарь с координатами:
+                - lamin: Южная широта
+                - lamax: Северная широта
+                - lomin: Западная долгота
+                - lomax: Восточная долгота
+
+        Raises:
+            ApiRequestException: Если статус ответа API не равен 200
+            IndexError: Если страна не найдена (ответ API пуст)
+
+        Example:
+            >>> api = OpenSkyOpenStreetMap()
+            >>> coords = api.get_coordinates("Russia")
+            >>> print(coords['lamin'])
+            '41.0'
+        """
+        headers_nominatim: Dict[str, str] = {"User-Agent": "test - app / 1.0"}
+
+        params_nominatim: Dict[str, Any] = {"q": country, "format": "json", "limit": 1}
+
+        response: requests.Response = requests.get(
+            url=self.openstreetmap, headers=headers_nominatim, params=params_nominatim
+        )
+
         if response.status_code != 200:
-            raise ApiRequestException(f"Nominatim Api ошибка {response.status_code}. {response.reason}")
+            raise ApiRequestException(
+                f"Nominatim Api ошибка {response.status_code}. {response.reason}"
+            )
 
-        data = response.json()
-        coordinates = data[0].get("boundingbox")
+        data: List[Dict[str, Any]] = response.json()
+
+        if not data:
+            raise IndexError(f"Страна '{country}' не найдена")
+
+        coordinates: List[str] = data[0].get("boundingbox", [])
+
         self.coordinates = {
             "lamin": coordinates[0],
             "lamax": coordinates[1],
             "lomin": coordinates[2],
-            "lomax": coordinates[3]
+            "lomax": coordinates[3],
         }
+
         return self.coordinates
 
-    def get_airplanes(self):
-        params = self.coordinates
-        response = requests.get(url=self.opensky, params=params)
 
-        if response.status_code != 200:
-            raise ApiRequestException(f"Opensky Api ошибка {response.status_code}, {response.reason}")
+def get_airplanes(self) -> Optional[List[List[Any]]]:
+    """Получить данные о самолётах через OpenSky API.
 
-        data = response.json()
-        self.airplanes = data.get("states")
-        return self.airplanes
+    Returns:
+        Optional[List[List[Any]]]: Список состояний самолётов
 
-    def get_aircraft(self):
-        states = self.airplanes
-        planes = []
-        for state in states:
-            plane = Aircraft(state)
-            planes.append(plane)
-        return planes
+    Raises:
+        ApiRequestException: При ошибке HTTP запроса
+        AttributeError: Если координаты не получены
+    """
+    if self.coordinates is None:
+        raise AttributeError("Сначала вызовите get_coordinates()")
 
-if __name__ == "__main__":
+    response: requests.Response = requests.get(
+        url=self.opensky, params=self.coordinates
+    )
 
-    api = OpenSkyOpenStreetMap()
+    if response.status_code != 200:
+        raise ApiRequestException(
+            f"Opensky Api ошибка {response.status_code}, {response.reason}"
+        )
 
-    # 2. Получаем координаты страны
-    api.get_coordinates("Spain")
-    api.get_airplanes()
-    # 3. Получаем список объектов Aircraft
-    aircraft = api.get_aircraft()
+    data: Dict[str, Any] = response.json()
+    self.airplanes = data.get("states")
+
+    return self.airplanes
 
 
-    # 4. Берём первый самолёт из списка (если есть)
-    if aircraft:
-        for a in aircraft:
+def get_aircraft(self) -> List[Aircraft]:
+    """Преобразовать данные API в список объектов Aircraft.
 
-            print(a.param_list)  # ← выводим страну
-    else:
-        print("Самолётов не найдено")
+    Returns:
+        List[Aircraft]: Список объектов самолётов
+
+    Raises:
+        AttributeError: Если данные самолётов не получены
+    """
+    if self.airplanes is None:
+        raise AttributeError("Сначала вызовите get_airplanes()")
+
+    return [Aircraft(state) for state in self.airplanes]

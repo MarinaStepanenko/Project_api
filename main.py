@@ -1,3 +1,4 @@
+from src.aircraft_saver import AircraftSaver
 from src.OpenSkyOpenStreetMap import OpenSkyOpenStreetMap
 
 
@@ -11,7 +12,11 @@ def user_interaction():
     country = input("Для поиска введите название страны на английском _ ").strip()
     while True:
         try:
-            n =  int(input("Введите кол-во самолётов по статистике высоты, которое необходимо увидеть _ "))
+            n = int(
+                input(
+                    "Введите кол-во самолётов по статистике высоты, которое необходимо увидеть _ "
+                )
+            )
             if n > 0:
                 break
             else:
@@ -19,7 +24,9 @@ def user_interaction():
         except ValueError:
             print("Значение должно быть числом больше нуля")
 
-    filter_country = input("Введите страну регистрации в/с для просмотра нужных самолётов _ ").strip()
+    filter_country = input(
+        "Введите страну регистрации в/с для просмотра нужных самолётов _ "
+    ).strip()
 
     api = OpenSkyOpenStreetMap()
 
@@ -31,18 +38,33 @@ def user_interaction():
 
     api.get_airplanes()
     aircraft_list = api.get_aircraft()
-    
+
     if not aircraft_list:
         print(f"Самолётов над страной {country} не найдено")
+        return
     print(f"Всего найдено {len(aircraft_list)} самолётов над страной {country}")
+
+    aircraft_save = input(
+        "Желаете сохранить результаты вашего поиска? Введите 'да' или 'нет' "
+    )
+    if aircraft_save.strip() == "да":
+        b = AircraftSaver()
+        for a in aircraft_list:
+            b.save_to_file(a)
 
     sorted_list = sorted(aircraft_list, key=lambda x: x.geo_altitude, reverse=True)
 
     sorted_by_country = [item for item in sorted_list if item.country == filter_country]
     if not sorted_by_country:
-        print(f"Топ {n} самолётов по высоте страны регистрации {filter_country} не найдено.\nИзмените поиск")
+        print(
+            f"Топ {n} самолётов по высоте страны регистрации {filter_country} не найдено.\nИзмените поиск"
+        )
     for i, plane in enumerate(sorted_by_country[:n], 1):
-        print(f"{i}. Позывной: {plane.callsign}, скорость: {plane.velocity:.0f} м/с, страна регистрации: {plane.country}, высота: {plane.geo_altitude:.0f}")
+        print(
+            f"{i}. Позывной: {plane.callsign}, скорость: {plane.velocity:.0f} м/с, "
+            f"страна регистрации: {plane.country}, "
+            f"высота: {plane.geo_altitude:.0f}"
+        )
 
 
 user_interaction()
